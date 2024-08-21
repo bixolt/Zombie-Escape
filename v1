@@ -1,1 +1,550 @@
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using UnityEngine.Animations;
+using System.Collections;
+using UnityEngine.Rendering.PostProcessing;
+using UnityEngine.Events;
+
+// MainGameManager
+public class MainGameManager : MonoBehaviour
+{
+    public GameObject gameOverPanel;
+    public GameObject victoryPanel;
+    public GameObject pauseMenuPanel;
+    public Animator fadeAnimator;
+    public GameObject saveLoadPanel;
+    public Animator transitionAnimator;
+    public GameObject[] difficultyPanels; // Panels for different difficulty levels
+
+    private bool gameIsOver = false;
+
+    void Start()
+    {
+        Time.timeScale = 1;
+    }
+
+    public void GameOver()
+    {
+        if (!gameIsOver)
+        {
+            gameIsOver = true;
+            Time.timeScale = 0;
+            StartCoroutine(FadeScreen("GameOver"));
+        }
+    }
+
+    public void Victory()
+    {
+        if (!gameIsOver)
+        {
+            gameIsOver = true;
+            Time.timeScale = 0;
+            StartCoroutine(FadeScreen("Victory"));
+        }
+    }
+
+    IEnumerator FadeScreen(string animationName)
+    {
+        fadeAnimator.SetTrigger(animationName);
+        yield return new WaitForSeconds(1f); // Assuming the fade animation duration is 1 second
+        if (animationName == "GameOver")
+        {
+            gameOverPanel.SetActive(true);
+        }
+        else
+        {
+            victoryPanel.SetActive(true);
+        }
+    }
+
+    public void RestartGame()
+    {
+        StartCoroutine(TransitionScene(SceneManager.GetActiveScene().buildIndex));
+    }
+
+    public void SaveGame()
+    {
+        // Implement save game logic
+    }
+
+    public void LoadGame()
+    {
+        // Implement load game logic
+    }
+
+    public void ChangeDifficulty(int level)
+    {
+        foreach (var panel in difficultyPanels)
+        {
+            panel.SetActive(false);
+        }
+        difficultyPanels[level].SetActive(true);
+        // Adjust game settings based on difficulty level
+    }
+
+    public void PauseGame()
+    {
+        Time.timeScale = 0;
+        pauseMenuPanel.SetActive(true);
+    }
+
+    public void ResumeGame()
+    {
+        Time.timeScale = 1;
+        pauseMenuPanel.SetActive(false);
+    }
+
+    IEnumerator TransitionScene(int sceneIndex)
+    {
+        transitionAnimator.SetTrigger("FadeOut");
+        yield return new WaitForSeconds(1f);
+        SceneManager.LoadScene(sceneIndex);
+        transitionAnimator.SetTrigger("FadeIn");
+    }
+}
+
+// DifficultyManager
+public class DifficultyManager : MonoBehaviour
+{
+    public float difficultyIncreaseInterval = 60f;
+    public float difficultyMultiplier = 1.2f;
+    public GameController gameController;
+    public AnimationCurve difficultyCurve;
+    private float initialSpawnInterval;
+    private int initialMaxZombies;
+
+    void Start()
+    {
+        initialSpawnInterval = gameController.spawnInterval;
+        initialMaxZombies = gameController.maxZombies;
+        StartCoroutine(IncreaseDifficulty());
+    }
+
+    IEnumerator IncreaseDifficulty()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(difficultyIncreaseInterval);
+            float timeElapsed = Time.timeSinceLevelLoad;
+            float difficultyFactor = difficultyCurve.Evaluate(timeElapsed / difficultyIncreaseInterval);
+
+            gameController.spawnInterval = initialSpawnInterval / (difficultyMultiplier * difficultyFactor);
+            gameController.maxZombies = Mathf.RoundToInt(initialMaxZombies * difficultyMultiplier * difficultyFactor);
+            Debug.Log("Difficulty Increased: " + gameController.spawnInterval + " " + gameController.maxZombies);
+        }
+    }
+}
+
+// AdvancedZombieAI
+public class AdvancedZombieAI : MonoBehaviour
+{
+    public float attackRange = 2f;
+    public float followDistance = 10f;
+    public float attackDelay = 1f;
+    public Transform player;
+    private float lastAttackTime;
+    public float patrolRange = 5f;
+    private Vector3 initialPosition;
+    public float patrolSpeed = 2f;
+    public float chaseSpeed = 4f;
+    public GameObject[] specialAbilities; // Special abilities of zombies
+
+    void Start()
+    {
+        initialPosition = transform.position;
+    }
+
+    void Update()
+    {
+        float distance = Vector3.Distance(transform.position, player.position);
+
+        if (distance < followDistance)
+        {
+            if (distance > attackRange)
+            {
+                transform.position = Vector3.MoveTowards(transform.position, player.position, chaseSpeed * Time.deltaTime);
+            }
+            else if (Time.time - lastAttackTime > attackDelay)
+            {
+                Attack();
+                lastAttackTime = Time.time;
+            }
+        }
+        else
+        {
+            Patrol();
+        }
+    }
+
+    void Attack()
+    {
+        player.GetComponent<Player>().TakeDamage(10);
+        // Play attack sound or animation here
+        foreach (var ability in specialAbilities)
+        {
+            // Implement special ability logic
+        }
+    }
+
+    void Patrol()
+    {
+        Vector3 patrolPosition = initialPosition + new Vector3(Mathf.Sin(Time.time), 0, Mathf.Cos(Time.time)) * patrolRange;
+        transform.position = Vector3.MoveTowards(transform.position, patrolPosition, patrolSpeed * Time.deltaTime);
+    }
+}
+
+// WeatherSystem
+public class WeatherSystem : MonoBehaviour
+{
+    public GameObject snowEffect;
+    public GameObject rainEffect;
+    public GameObject fogEffect;
+    public AudioClip[] weatherAmbiance;
+    public PostProcessVolume postProcessVolume;
+    public float weatherTransitionDuration = 2f;
+
+    private AudioSource audioSource;
+    private GameObject currentWeatherEffect;
+    private Bloom bloom;
+    private MotionBlur motionBlur;
+    private DepthOfField depthOfField;
+
+    void Start()
+    {
+        audioSource = GetComponent<AudioSource>();
+        postProcessVolume.profile.TryGetSettings(out bloom);
+        postProcessVolume.profile.TryGetSettings(out motionBlur);
+        postProcessVolume.profile.TryGetSettings(out depthOfField);
+        
+        ChangeWeather(Random.Range(0, 3));
+    }
+
+    public void ChangeWeather(int weatherType)
+    {
+        if (currentWeatherEffect != null)
+        {
+            Destroy(currentWeatherEffect);
+        }
+
+        switch (weatherType)
+        {
+            case 0:
+                StartCoroutine(TransitionWeather(snowEffect, weatherAmbiance[0], 0.5f, 180f, 20f));
+                break;
+            case 1:
+                StartCoroutine(TransitionWeather(rainEffect, weatherAmbiance[1], 1.0f, 270f, 10f));
+                break;
+            case 2:
+                StartCoroutine(TransitionWeather(fogEffect, weatherAmbiance[2], 0.8f, 120f, 15f));
+                break;
+        }
+    }
+
+    IEnumerator TransitionWeather(GameObject newWeatherEffect, AudioClip ambianceClip, float bloomIntensity, float motionBlurAngle, float depthOfFieldDistance)
+    {
+        if (currentWeatherEffect != null)
+        {
+            float elapsedTime = 0f;
+            while (elapsedTime < weatherTransitionDuration)
+            {
+                bloom.intensity.value = Mathf.Lerp(bloom.intensity.value, bloomIntensity, elapsedTime / weatherTransitionDuration);
+                motionBlur.shutterAngle.value = Mathf.Lerp(motionBlur.shutterAngle.value, motionBlurAngle, elapsedTime / weatherTransitionDuration);
+                depthOfField.focusDistance.value = Mathf.Lerp(depthOfField.focusDistance.value, depthOfFieldDistance, elapsedTime / weatherTransitionDuration);
+                elapsedTime += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        currentWeatherEffect = Instantiate(newWeatherEffect);
+        audioSource.PlayOneShot(ambianceClip);
+    }
+}
+
+// UIManager
+public class UIManager : MonoBehaviour
+{
+    public CanvasGroup mainMenu;
+    public CanvasGroup pauseMenu;
+    public CanvasGroup settingsMenu;
+    public CanvasGroup inventoryMenu;
+    public Image miniMap;
+    public float transitionDuration = 0.5f;
+    public CanvasGroup notificationPanel;
+    public Text notificationText;
+    public UnityEvent onMainMenuShow;
+    public UnityEvent onMainMenuHide;
+    public UnityEvent onPauseMenuShow;
+    public UnityEvent onPauseMenuHide;
+
+    void Start()
+    {
+        ShowMenu(mainMenu);
+        onMainMenuShow.Invoke();
+    }
+
+    public void ShowMenu(CanvasGroup menu)
+    {
+        StartCoroutine(FadeCanvasGroup(menu, 1, transitionDuration));
+        if (menu == mainMenu) onMainMenuShow.Invoke();
+        if (menu == pauseMenu) onPauseMenuShow.Invoke();
+    }
+
+    public void HideMenu(CanvasGroup menu)
+    {
+        StartCoroutine(FadeCanvasGroup(menu, 0, transitionDuration));
+    }
+
+    IEnumerator FadeCanvasGroup(CanvasGroup canvasGroup, float targetAlpha, float duration)
+    {
+        float startAlpha = canvasGroup.alpha;
+        float elapsedTime = 0f;
+
+        while (elapsedTime < duration)
+        {
+            canvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, elapsedTime / duration);
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+        canvasGroup.alpha = targetAlpha;
+        canvasGroup.interactable = targetAlpha > 0;
+        canvasGroup.blocksRaycasts = targetAlpha > 0;
+    }
+
+    public void ShowNotification(string message)
+    {
+        notificationText.text = message;
+        ShowMenu(notificationPanel);
+        StartCoroutine(HideNotificationAfterDelay(3f));
+    }
+
+    IEnumerator HideNotificationAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        HideMenu(notificationPanel);
+    }
+
+    public void TogglePauseMenu()
+    {
+        if (pauseMenu.alpha == 0)
+        {
+            ShowMenu(pauseMenu);
+            onPauseMenuShow.Invoke();
+        }
+        else
+        {
+            HideMenu(pauseMenu);
+            onPauseMenuHide.Invoke();
+        }
+    }
+
+    public void UpdateMiniMap(Texture2D mapTexture)
+    {
+        miniMap.sprite = Sprite.Create(mapTexture, new Rect(0, 0, mapTexture.width, mapTexture.height), new Vector2(0.5f, 0.5f));
+    }
+}
+
+// AudioManager
+public class AudioManager : MonoBehaviour
+{
+    public AudioSource musicSource;
+    public AudioSource sfxSource;
+    public AudioClip[] backgroundMusic;
+    public AudioClip[] soundEffects;
+
+    void Start()
+    {
+        PlayBackgroundMusic(0);
+    }
+
+    public void PlayBackgroundMusic(int trackIndex)
+    {
+        if (trackIndex < backgroundMusic.Length)
+        {
+            musicSource.clip = backgroundMusic[trackIndex];
+            musicSource.Play();
+        }
+    }
+
+    public void PlaySoundEffect(int effectIndex)
+    {
+        if (effectIndex < soundEffects.Length)
+        {
+            sfxSource.PlayOneShot(soundEffects[effectIndex]);
+        }
+    }
+}
+
+// VisualEffectManager
+public class VisualEffectManager : MonoBehaviour
+{
+    public GameObject[] visualEffects;
+    public float effectIntensity = 1f;
+
+    public void ActivateEffect(int effectIndex)
+    {
+        if (effectIndex < visualEffects.Length)
+        {
+            visualEffects[effectIndex].SetActive(true);
+        }
+    }
+
+    public void DeactivateEffect(int effectIndex)
+    {
+        if (effectIndex < visualEffects.Length)
+        {
+            visualEffects[effectIndex].SetActive(false);
+        }
+    }
+
+    public void AdjustEffectIntensity(float newIntensity)
+    {
+        effectIntensity = newIntensity;
+        foreach (var effect in visualEffects)
+        {
+            var effectComponent = effect.GetComponent<ParticleSystem>();
+            if (effectComponent != null)
+            {
+                var main = effectComponent.main;
+                main.startSize = newIntensity;
+            }
+        }
+    }
+}
+
+// ParticleEffectManager
+public class ParticleEffectManager : MonoBehaviour
+{
+    public GameObject[] particleEffects;
+
+    public void TriggerEffect(int effectIndex, Vector3 position)
+    {
+        if (effectIndex < particleEffects.Length)
+        {
+            var effect = Instantiate(particleEffects[effectIndex], position, Quaternion.identity);
+            Destroy(effect, 2f); // Destroy effect after 2 seconds
+        }
+    }
+}
+
+// PowerUpManager
+public class PowerUpManager : MonoBehaviour
+{
+    public GameObject[] powerUpPrefabs;
+    public Transform[] spawnPoints;
+
+    void Start()
+    {
+        SpawnPowerUps();
+    }
+
+    void SpawnPowerUps()
+    {
+        foreach (var spawnPoint in spawnPoints)
+        {
+            int index = Random.Range(0, powerUpPrefabs.Length);
+            Instantiate(powerUpPrefabs[index], spawnPoint.position, Quaternion.identity);
+        }
+    }
+}
+
+// ResourceManager
+public class ResourceManager : MonoBehaviour
+{
+    public int wood;
+    public int stone;
+    public int metal;
+    public Text resourceDisplay;
+
+    void Start()
+    {
+        UpdateResourceDisplay();
+    }
+
+    public void CollectResource(string resourceType, int amount)
+    {
+        switch (resourceType)
+        {
+            case "Wood":
+                wood += amount;
+                break;
+            case "Stone":
+                stone += amount;
+                break;
+            case "Metal":
+                metal += amount;
+                break;
+        }
+        UpdateResourceDisplay();
+    }
+
+    void UpdateResourceDisplay()
+    {
+        resourceDisplay.text = $"Wood: {wood} | Stone: {stone} | Metal: {metal}";
+    }
+}
+
+// BaseBuilder
+public class BaseBuilder : MonoBehaviour
+{
+    public GameObject[] buildingPrefabs;
+    public Transform[] buildLocations;
+
+    public void Build(int buildingIndex, int locationIndex)
+    {
+        if (buildingIndex < buildingPrefabs.Length && locationIndex < buildLocations.Length)
+        {
+            Instantiate(buildingPrefabs[buildingIndex], buildLocations[locationIndex].position, Quaternion.identity);
+        }
+    }
+}
+
+// PlayerAnimator
+public class PlayerAnimator : MonoBehaviour
+{
+    public Animator animator;
+
+    public void PlayAttackAnimation()
+    {
+        animator.SetTrigger("Attack");
+    }
+
+    public void PlayIdleAnimation()
+    {
+        animator.SetTrigger("Idle");
+    }
+
+    public void PlayRunAnimation()
+    {
+        animator.SetTrigger("Run");
+    }
+}
+
+// MazeRunnerGameManager
+public class MazeRunnerGameManager : MonoBehaviour
+{
+    public Text scoreText;
+    public Text timerText;
+    public int maxScore = 100;
+    private int currentScore;
+    private float timer;
+
+    void Start()
+    {
+        currentScore = 0;
+        timer = 0f;
+    }
+
+    void Update()
+    {
+        timer += Time.deltaTime;
+        timerText.text = $"Time: {timer:F2}";
+    }
+
+    public void CollectCoin()
+    {
+        currentScore += 10; // Adjust score for each coin collected
+        scoreText.text = $"Score: {currentScore}";
+    }
+}
 
